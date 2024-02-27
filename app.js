@@ -3,8 +3,10 @@ require("dotenv").config();
 const express = require("express");
 const bodyParser = require("body-parser");
 const ejs = require("ejs");
-const encrypt = require("mongoose-encryption");
 const mongoose = require("mongoose");
+const md5 = require("md5");
+const bcrypt = require("bcrypt");
+const saltRounds = 10;
 
 const app = express();
 mongoose.connect("mongodb://localhost:27017/userDB");
@@ -15,10 +17,6 @@ const userSechema = new mongoose.Schema({
   password: String,
 });
 
-userSechema.plugin(encrypt, {
-  secret: process.env.SECRET,
-  encryptedFields: ["password"],
-});
 const User = new mongoose.model("User", userSechema);
 
 app.use(express.static("public"));
@@ -38,9 +36,9 @@ app.post("/login", (req, res) => {
   User.findOne({ email: username })
     .then((user) => {
       if (user) {
-        if (user.password == password) {
-          res.render("secrets");
-        }
+        bcrypt.compare(password, user.password, function (err, result) {
+          if (result == true) res.render("secrets");
+        });
       }
     })
     .catch((err) => {
@@ -52,18 +50,21 @@ app.get("/register", (req, res) => {
   res.render("register");
 });
 app.post("/register", (req, res) => {
-  const user = new User({
-    email: req.body.username,
-    password: req.body.password,
-  });
-  user
-    .save()
-    .then(() => {
-      res.render("secrets");
-    })
-    .catch((err) => {
-      console.log(err);
+  bcrypt.hash(req.body.password, saltRounds, function (err, hash) {
+    // Store hash in your password DB.
+    const user = new User({
+      email: req.body.username,
+      password: hash,
     });
+    user
+      .save()
+      .then(() => {
+        res.render("secrets");
+      })
+      .catch((err) => {
+        console.log(err);
+      });
+  });
 });
 
 const port = 3000;
